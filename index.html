@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plinko Probability Simulation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="matrix-bg"></canvas>
+  <div class="bg-gradient"></div>
+  <div class="container card">
+    <h1>Plinko Probability</h1>
+    <p class="subtitle">Interactive probability simulation on a Plinko board.<br>Launch balls and watch the distribution!</p>
+    <div class="settings">
+      <label>Rows:
+        <input type="number" id="rows-input" min="5" max="10" value="8" style="width: 48px;">
+      </label>
+      <label>Balls per run:
+        <input type="number" id="balls-input" min="1" max="1000" value="100" style="width: 64px;">
+      </label>
+      <label class="sound-toggle">
+        <input type="checkbox" id="sound-toggle" checked>
+        <span>Sound</span>
+      </label>
+      <label for="speedRange">Drop speed: </label>
+      <input type="range" id="speedRange" min="1" max="100" value="50">
+      <span id="speedValue">50</span>
+    </div>
+    <div id="plinko-board"></div>
+    <div class="controls">
+      <button id="toggle-board-mode-btn">Mode: Square</button>
+      <button id="drop-one">Drop one ball</button>
+      <button id="drop-many">Drop many balls</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div id="histogram" style="margin-top: 30px;"></div>
+    <div id="stats"></div>
+    <p style="text-align: center; font-size: 0.9rem; color: #ccc; margin: 8px 0;">💡 Statistics automatically switch between modes</p>
+    <div class="extra-controls">
+      <button class="toggle-prob-btn" id="toggle-prob-btn">Show/hide probabilities</button>
+      <button class="random-board-btn" id="random-board-btn">Random board</button>
+      <button class="save-png-btn" id="save-png-btn">Save as PNG</button>
+    </div>
+    <div id="probabilities" class="probabilities"></div>
+  </div>
+
+  <script src="plinko.js"></script>
+</body>
+</html> 
