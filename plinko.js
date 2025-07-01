@@ -38,8 +38,24 @@ let slotCountsSquare = Array(SLOTS).fill(0);
 let slotCountsPyramid = Array(SLOTS).fill(0);
 let slotCounts = slotCountsSquare;
 
+// --- Управление процессами для режимов ---
+const modeProcesses = {
+  square: [],
+  pyramid: []
+};
+
+function clearModeProcesses(mode) {
+  for (const proc of modeProcesses[mode]) {
+    if (proc.type === 'timeout') clearTimeout(proc.id);
+    if (proc.type === 'raf') cancelAnimationFrame(proc.id);
+  }
+  modeProcesses[mode] = [];
+}
+
 // --- Кнопка переключения режима ---
 document.getElementById('toggle-board-mode-btn').onclick = () => {
+  // Останавливаем процессы текущего режима
+  clearModeProcesses(boardMode);
   boardMode = (boardMode === 'square') ? 'pyramid' : 'square';
   document.getElementById('toggle-board-mode-btn').textContent =
     'Mode: ' + (boardMode === 'square' ? 'Square' : 'Pyramid');
@@ -296,11 +312,21 @@ speedRange.addEventListener('input', () => {
   speedValue.textContent = plinkoSpeed;
 });
 
+// === Управление силой отскока ===
+const bounceRange = document.getElementById('bounceRange');
+const bounceValue = document.getElementById('bounceValue');
+let bouncePower = parseFloat(bounceRange.value);
+
+bounceRange.addEventListener('input', () => {
+  bouncePower = parseFloat(bounceRange.value);
+  bounceValue.textContent = bouncePower;
+});
+
 function animateBall(color, delay = 0) {
   // --- Настоящая физика столкновений ---
   let x, y;
+  const myMode = boardMode; // Запоминаем режим запуска
   if (boardMode === 'pyramid') {
-    // Спавн по центру над верхним пегом
     x = BOARD_WIDTH / 2;
     y = (BOARD_HEIGHT / (ROWS + 2)) * 0.45;
   } else {
@@ -310,10 +336,10 @@ function animateBall(color, delay = 0) {
     y = (BOARD_HEIGHT / (ROWS + 2)) * 0.45;
   }
   let vx = 0;
-  let vy = 3.2; // скорость падения
-  const gravity = 0.18; // ускорение свободного падения
-  const vxMax = 4.0; // увеличенный диапазон горизонтальной скорости
-  const damping = 0.99; // меньшее затухание горизонтальной скорости
+  let vy = 3.2;
+  const gravity = 0.18;
+  const vxMax = 4.0;
+  const damping = 0.99;
   const leftBoundary = BALL_RADIUS;
   const rightBoundary = BOARD_WIDTH - BALL_RADIUS;
   let state = 'fall';
@@ -339,29 +365,26 @@ function animateBall(color, delay = 0) {
   }
 
   function step() {
+    // Если режим сменился — "заморозить" процесс
+    if (myMode !== boardMode) return;
     let cx = parseFloat(ball.getAttribute('cx'));
     let cy = parseFloat(ball.getAttribute('cy'));
-    // 1. Двигаем шарик вниз
-    vx *= damping; // затухание горизонтальной скорости
-    vy += gravity; // гравитация
+    vx *= damping;
+    vy += gravity;
     let nextX = cx + vx;
     let nextY = cy + vy;
-
-    // --- Боковые границы ---
     if (nextX < leftBoundary) {
       nextX = leftBoundary;
-      vx = -vx * 1.05; // Было 0.7, теперь 1.05 (сила отскока x1.5)
+      vx = -vx * 1.05;
     }
     if (nextX > rightBoundary) {
       nextX = rightBoundary;
       vx = -vx * 1.05;
     }
-
-    // 2. Проверяем столкновение с ближайшим пегом
     let collision = null;
     let minDist = Infinity;
     for (const peg of allPegs) {
-      if (peg.y <= cy) continue; // только пеги ниже текущей позиции
+      if (peg.y <= cy) continue;
       let dx = peg.x - cx;
       let dy = peg.y - cy;
       if (Math.abs(dx) < 2*BALL_RADIUS && dy > 0 && dy < minDist) {
@@ -373,7 +396,6 @@ function animateBall(color, delay = 0) {
       }
     }
     if (collision) {
-      // Двигаем шарик до точки столкновения
       let peg = collision;
       let dx = peg.x - cx;
       let dy = peg.y - cy;
@@ -385,21 +407,20 @@ function animateBall(color, delay = 0) {
       ball.setAttribute('cx', hitX);
       ball.setAttribute('cy', hitY);
       highlightPeg(peg.row, peg.col, color);
-      // --- Отскок ---
-      // После столкновения: вертикальная скорость всегда вниз, горизонтальная — случайная
-      vy = Math.abs((3.2 + Math.random() * 0.8) * 1.5); // x1.5
-      vx = ((Math.random() * 2 - 1) * vxMax) * 2.5; // x2.5 — оптимальная сила отскока
-      // Делаем небольшой сдвиг, чтобы не застрять в пеге
+      vy = Math.abs((3.2 + Math.random() * 0.8) * 1.5);
+      vx = ((Math.random() * 2 - 1) * vxMax) * bouncePower;
       ball.setAttribute('cx', hitX + vx * 2);
       ball.setAttribute('cy', hitY + vy * 2);
-      // --- Управляем задержкой через ползунок ---
-      setTimeout(() => requestAnimationFrame(step), getPlinkoDelay());
+      // Сохраняем идентификатор таймера
+      const timeoutId = setTimeout(() => {
+        const rafId = requestAnimationFrame(step);
+        modeProcesses[myMode].push({type: 'raf', id: rafId});
+      }, getPlinkoDelay());
+      modeProcesses[myMode].push({type: 'timeout', id: timeoutId});
       return;
     }
-    // Нет столкновений — двигаем вниз
     ball.setAttribute('cx', nextX);
     ball.setAttribute('cy', nextY);
-    // Шлейф
     const tail = document.createElementNS(svgNS, 'circle');
     tail.setAttribute('cx', nextX);
     tail.setAttribute('cy', nextY);
@@ -408,7 +429,6 @@ function animateBall(color, delay = 0) {
     tail.style.opacity = 0.18 + 0.12 * Math.random();
     svg.appendChild(tail);
     setTimeout(() => { if (tail.parentNode) svg.removeChild(tail); }, 180);
-    // Проверяем выход за низ
     if (nextY > BOARD_HEIGHT - BALL_RADIUS) {
       let slot = Math.floor(nextX / (BOARD_WIDTH / SLOTS));
       if (slot < 0) slot = 0;
@@ -419,11 +439,15 @@ function animateBall(color, delay = 0) {
       updateHistogram();
       return;
     }
-    // --- Управляем задержкой через ползунок ---
-    setTimeout(() => requestAnimationFrame(step), getPlinkoDelay());
+    const timeoutId = setTimeout(() => {
+      const rafId = requestAnimationFrame(step);
+      modeProcesses[myMode].push({type: 'raf', id: rafId});
+    }, getPlinkoDelay());
+    modeProcesses[myMode].push({type: 'timeout', id: timeoutId});
   }
   if (delay > 0) {
-    setTimeout(step, delay);
+    const timeoutId = setTimeout(step, delay);
+    modeProcesses[myMode].push({type: 'timeout', id: timeoutId});
   } else {
     step();
   }
@@ -438,14 +462,18 @@ function getPlinkoDelay() {
 
 function dropManyBalls(n, delay = 100) {
   let i = 0;
+  const myMode = boardMode;
   function dropBatch() {
+    if (myMode !== boardMode) return; // Останавливаем если режим сменился
     if (i < n) {
       const color = getRandomBallColor();
       animateBall(color, i * delay);
       i++;
-      setTimeout(dropBatch, delay);
+      const timeoutId = setTimeout(dropBatch, delay);
+      modeProcesses[myMode].push({type: 'timeout', id: timeoutId});
     } else {
-      setTimeout(updateHistogram, 400);
+      const timeoutId = setTimeout(updateHistogram, 400);
+      modeProcesses[myMode].push({type: 'timeout', id: timeoutId});
     }
   }
   dropBatch();
